@@ -27,7 +27,7 @@ import org.apache.deltaspike.core.util.metadata.AnnotationInstanceProvider;
 import org.apache.deltaspike.core.util.metadata.builder.AnnotatedTypeBuilder;
 import org.apache.deltaspike.core.util.metadata.builder.ContextualLifecycle;
 import org.os890.ds.addon.spring.spi.BeanFilter;
-import org.os890.ds.addon.spring.spi.SpringContextCreator;
+import org.os890.ds.addon.spring.spi.SpringContainerManager;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
 import org.springframework.beans.factory.support.AbstractBeanDefinition;
@@ -110,17 +110,17 @@ public class SpringBridgeExtension implements Extension
 
     public void initContainerBridge(@Observes AfterBeanDiscovery abd, BeanManager beanManager)
     {
-        springContext = resolveSpringContext(abd, new CdiAwareBeanFactoryPostProcessor(cdiBeansForSpring));
+        this.springContext = resolveSpringContext(abd);
 
-        if (springContext == null)
+        if (this.springContext == null)
         {
             abd.addDefinitionError(new IllegalStateException("no spring-context found/created"));
             return;
         }
 
-        for (String beanName : springContext.getBeanDefinitionNames())
+        for (String beanName : this.springContext.getBeanDefinitionNames())
         {
-            BeanDefinition beanDefinition = springContext.getBeanFactory().getBeanDefinition(beanName);
+            BeanDefinition beanDefinition = this.springContext.getBeanFactory().getBeanDefinition(beanName);
 
             Class<?> beanClass = ClassUtils.tryToLoadClassForName(beanDefinition.getBeanClassName());
 
@@ -129,11 +129,11 @@ public class SpringBridgeExtension implements Extension
                 continue; //don't add cdi-beans registered in spring back to cdi
             }
 
-            abd.addBean(createBeanAdapter(beanClass, beanName, beanDefinition, springContext, beanManager, abd));
+            abd.addBean(createBeanAdapter(beanClass, beanName, beanDefinition, this.springContext, beanManager, abd));
         }
 
-        beanFilterList.clear();
-        cdiBeansForSpring.clear();
+        this.beanFilterList.clear();
+        this.cdiBeansForSpring.clear();
     }
 
     private boolean isFilteredSpringBean(Class<?> beanClass)
@@ -148,32 +148,38 @@ public class SpringBridgeExtension implements Extension
         return false;
     }
 
-    private ConfigurableApplicationContext resolveSpringContext(AfterBeanDiscovery abd,
-                                                                BeanFactoryPostProcessor... beanFactoryPostProcessors)
+    private ConfigurableApplicationContext resolveSpringContext(AfterBeanDiscovery abd)
     {
-        List<SpringContextCreator> resolvers = ServiceUtils.loadServiceImplementations(SpringContextCreator.class);
+        List<SpringContainerManager> scmList = ServiceUtils.loadServiceImplementations(SpringContainerManager.class);
 
-        if (resolvers.isEmpty())
+        BeanFactoryPostProcessor beanFactoryPostProcessor =  new CdiAwareBeanFactoryPostProcessor(cdiBeansForSpring);
+
+        if (scmList.isEmpty())
         {
             return null;
         }
-        if (resolvers.size() == 1)
+        if (scmList.size() == 1)
         {
-            return resolvers.iterator().next().createWith(beanFactoryPostProcessors);
+            return scmList.iterator().next().bootContainer(beanFactoryPostProcessor);
         }
-        if (resolvers.size() > 2)
+        if (scmList.size() > 2)
         {
-            abd.addDefinitionError(new IllegalStateException(resolvers.size() + " spring-context-resolvers found"));
+            abd.addDefinitionError(new IllegalStateException(scmList.size() + " spring-context-resolvers found"));
         }
         else //2 are found -> use the custom one
         {
-            for (SpringContextCreator resolver : resolvers)
+            for (SpringContainerManager containerManager : scmList)
             {
-                if (resolver instanceof SimpleSpringContextCreator)
+                if (containerManager instanceof SimpleSpringContainerManager)
                 {
                     continue;
                 }
-                return resolver.createWith(beanFactoryPostProcessors);
+
+                if (containerManager.isStarted())
+                {
+                    return containerManager.getStartedContainer();
+                }
+                return containerManager.bootContainer(beanFactoryPostProcessor);
             }
         }
         return null;
@@ -184,15 +190,16 @@ public class SpringBridgeExtension implements Extension
                                           AfterBeanDiscovery abd)
     {
         String beanScope = beanDefinition.getScope();
-        ContextualLifecycle springAwareLifecycle = new SpringAwareBeanLifecycle(applicationContext, beanName, beanScope);
+        ContextualLifecycle lifecycleAdapter = new SpringAwareBeanLifecycle(applicationContext, beanName, beanScope);
 
         List<Annotation> cdiQualifiers = tryToMapToCdiQualifier(beanName, beanDefinition, abd);
 
         //we don't need to handle (remove) interceptor annotations, because BeanBuilder >won't< add them (not supported)
-        BeanBuilder<T> beanBuilder = new BeanBuilder<T>(bm).readFromType(new AnnotatedTypeBuilder<T>().readFromType(beanClass).create())
+        BeanBuilder<T> beanBuilder = new BeanBuilder<T>(bm)
+                .readFromType(new AnnotatedTypeBuilder<T>().readFromType(beanClass).create())
                 .passivationCapable(true)
-                .scope(Dependent.class) //the instance (or proxy) returned by spring shouldn't createWith proxied
-                .beanLifecycle(springAwareLifecycle)
+                .scope(Dependent.class) //the instance (or proxy) returned by spring shouldn't bootContainer proxied
+                .beanLifecycle(lifecycleAdapter)
                 .addQualifiers()
                 .injectionPoints(Collections.<InjectionPoint>emptySet())
                 .alternative(false)
@@ -206,6 +213,7 @@ public class SpringBridgeExtension implements Extension
         return beanBuilder.create();
     }
 
+    //TODO test it
     private List<Annotation> tryToMapToCdiQualifier(String beanName,
                                                     BeanDefinition beanDefinition,
                                                     AfterBeanDiscovery abd)
@@ -216,7 +224,6 @@ public class SpringBridgeExtension implements Extension
             boolean unsupportedQualifierFound = false;
             for (AutowireCandidateQualifier springQualifier : ((AbstractBeanDefinition) beanDefinition).getQualifiers())
             {
-                //TODO test it
                 Class qualifierClass = ClassUtils.tryToLoadClassForName(springQualifier.getTypeName());
 
                 if (qualifierClass == null)

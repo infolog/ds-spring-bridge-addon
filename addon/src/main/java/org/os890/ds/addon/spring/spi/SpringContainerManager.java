@@ -16,27 +16,22 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.os890.ds.addon.spring.impl;
+package org.os890.ds.addon.spring.spi;
 
-import org.apache.deltaspike.core.api.config.ConfigResolver;
-import org.os890.ds.addon.spring.spi.SpringContextCreator;
+import org.apache.deltaspike.core.spi.activation.Deactivatable;
 import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
 import org.springframework.context.ConfigurableApplicationContext;
-import org.springframework.context.support.ClassPathXmlApplicationContext;
 
-public class SimpleSpringContextCreator implements SpringContextCreator
+public interface SpringContainerManager extends Deactivatable
 {
-    @Override
-    public ConfigurableApplicationContext createWith(BeanFactoryPostProcessor... beanFactoryPostProcessors)
-    {
-        String contextXml = ConfigResolver.getPropertyValue("springContextXml", "/META-INF/application-context.xml");
-        ConfigurableApplicationContext context = new ClassPathXmlApplicationContext(new String[] {contextXml}, false);
+    /**
+     * If the container was started externally, the bridge just works in one direction
+     * (injection of spring-beans into cdi beansI
+     * @return true if a container is started externally, false otherwise
+     */
+    boolean isStarted();
 
-        for (BeanFactoryPostProcessor postProcessor : beanFactoryPostProcessors)
-        {
-            context.addBeanFactoryPostProcessor(postProcessor);
-        }
-        context.refresh();
-        return context;
-    }
+    ConfigurableApplicationContext getStartedContainer();
+
+    ConfigurableApplicationContext bootContainer(BeanFactoryPostProcessor... beanFactoryPostProcessors);
 }
