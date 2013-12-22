@@ -17,24 +17,18 @@
     specific language governing permissions and limitations
     under the License.
 -->
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-
-    <packaging>pom</packaging>
-
-    <groupId>org.os890.ds.addon</groupId>
-    <artifactId>ds-spring-addon-project</artifactId>
-
-    <name>DS-Spring-Bridge Add-on Project</name>
-    <version>1.0.0</version>
-
-    <modules>
-        <module>addon</module>
-        <module>example</module>
-        <module>spring-example-module</module>
-        <module>jsf-example_owb-two-way</module>
-    </modules>
-
-</project>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+        "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="http://java.sun.com/jsf/html"
+      xmlns:f="http://java.sun.com/jsf/core">
+<h:head>
+    <title>Hello CDI/Spring two-way bridge</title>
+</h:head>
+<h:body>
+    value of singleton bean: #{requestScopedCdiBean.singletonSpringBean.value}<br/>
+    value of prototype bean: #{requestScopedCdiBean.prototypeSpringBean.value}<br/>
+    value of named bean: #{requestScopedCdiBean.namedSpringBean.value}<br/>
+    value of named bean (direct): #{customNamed.value}<br/>
+</h:body>
+</html>

@@ -41,12 +41,14 @@ import javax.enterprise.inject.spi.*;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Type;
 import java.util.*;
 
 //other scopes than singleton and prototype require a proper proxy-config (ScopedProxyMode.TARGET_CLASS) for spring
 public class SpringBridgeExtension implements Extension
 {
     private List<Bean<?>> cdiBeansForSpring = new ArrayList<Bean<?>>();
+    private static ThreadLocal<List<Bean<?>>> currentCdiBeans = new ThreadLocal<List<Bean<?>>>();
 
     private ConfigurableApplicationContext springContext;
 
@@ -154,35 +156,45 @@ public class SpringBridgeExtension implements Extension
 
         BeanFactoryPostProcessor beanFactoryPostProcessor =  new CdiAwareBeanFactoryPostProcessor(cdiBeansForSpring);
 
-        if (scmList.isEmpty())
+        try
         {
+            currentCdiBeans.set(cdiBeansForSpring);
+
+            if (scmList.isEmpty())
+            {
+                return null;
+            }
+            if (scmList.size() == 1)
+            {
+                return scmList.iterator().next().bootContainer(beanFactoryPostProcessor);
+            }
+            if (scmList.size() > 2)
+            {
+                abd.addDefinitionError(new IllegalStateException(scmList.size() + " spring-context-resolvers found"));
+            }
+            else //2 are found -> use the custom one
+            {
+                for (SpringContainerManager containerManager : scmList)
+                {
+                    if (containerManager instanceof SimpleSpringContainerManager)
+                    {
+                        continue;
+                    }
+
+                    if (containerManager.isStarted())
+                    {
+                        return containerManager.getStartedContainer();
+                    }
+                    return containerManager.bootContainer(beanFactoryPostProcessor);
+                }
+            }
             return null;
         }
-        if (scmList.size() == 1)
+        finally
         {
-            return scmList.iterator().next().bootContainer(beanFactoryPostProcessor);
+            currentCdiBeans.set(null);
+            currentCdiBeans.remove();
         }
-        if (scmList.size() > 2)
-        {
-            abd.addDefinitionError(new IllegalStateException(scmList.size() + " spring-context-resolvers found"));
-        }
-        else //2 are found -> use the custom one
-        {
-            for (SpringContainerManager containerManager : scmList)
-            {
-                if (containerManager instanceof SimpleSpringContainerManager)
-                {
-                    continue;
-                }
-
-                if (containerManager.isStarted())
-                {
-                    return containerManager.getStartedContainer();
-                }
-                return containerManager.bootContainer(beanFactoryPostProcessor);
-            }
-        }
-        return null;
     }
 
     private <T> Bean<T> createBeanAdapter(Class<T> beanClass, String beanName, BeanDefinition beanDefinition,
@@ -197,17 +209,31 @@ public class SpringBridgeExtension implements Extension
         //we don't need to handle (remove) interceptor annotations, because BeanBuilder >won't< add them (not supported)
         BeanBuilder<T> beanBuilder = new BeanBuilder<T>(bm)
                 .readFromType(new AnnotatedTypeBuilder<T>().readFromType(beanClass).create())
-                .passivationCapable(true)
-                .scope(Dependent.class) //the instance (or proxy) returned by spring shouldn't bootContainer proxied
+                .name(beanName)
                 .beanLifecycle(lifecycleAdapter)
-                .addQualifiers()
                 .injectionPoints(Collections.<InjectionPoint>emptySet())
+                .scope(Dependent.class) //the instance (or proxy) returned by spring shouldn't bootContainer proxied
+                .passivationCapable(true)
                 .alternative(false)
                 .nullable(true);
 
         if (!cdiQualifiers.isEmpty())
         {
             beanBuilder.addQualifiers(cdiQualifiers);
+        }
+
+        boolean typeObjectFound = false;
+        for (Type type : beanBuilder.getTypes())
+        {
+            if (Object.class.equals(type))
+            {
+                typeObjectFound = true;
+            }
+        }
+
+        if (!typeObjectFound)
+        {
+            beanBuilder.addType(Object.class); //java.lang.Object needs to be present (as type) in any case
         }
 
         return beanBuilder.create();
@@ -268,5 +294,10 @@ public class SpringBridgeExtension implements Extension
     ApplicationContext getApplicationContext()
     {
         return springContext;
+    }
+
+    static List<Bean<?>> getCdiBeans()
+    {
+        return currentCdiBeans.get();
     }
 }
