@@ -24,20 +24,22 @@
 
     <packaging>pom</packaging>
 
-    <groupId>org.os890.ds.addon</groupId>
-    <artifactId>ds-spring-addon-project</artifactId>
+    <parent>
+        <groupId>org.os890.ds.addon</groupId>
+        <artifactId>ds-spring-addon-project</artifactId>
+        <version>1.0.0</version>
+    </parent>
 
-    <name>DS-Spring-Bridge Add-on Project</name>
+    <groupId>org.os890.ds.addon.demo</groupId>
+    <artifactId>ds-spring-addon-full-demo-project</artifactId>
+
+    <name>DS-Spring-Bridge Full-Demo Project</name>
     <version>1.0.0</version>
 
     <modules>
-        <module>addon</module>
-        <module>example</module>
+        <module>full-example</module>
         <module>spring-example-module</module>
-        <module>jsf-example_owb-one-way</module>
-        <module>jsf-example_owb-two-way</module>
-        <module>jsf-example_cdi-two-way</module>
-        <module>jsf-example_cdi_full</module>
+        <module>cdi-example-module</module>
     </modules>
 
 </project>
