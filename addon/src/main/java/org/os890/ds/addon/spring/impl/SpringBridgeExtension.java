@@ -296,7 +296,7 @@ public class SpringBridgeExtension implements Extension
         return springContext;
     }
 
-    static List<Bean<?>> getCdiBeans()
+    public static List<Bean<?>> getCdiBeans()
     {
         return currentCdiBeans.get();
     }

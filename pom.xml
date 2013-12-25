@@ -37,6 +37,7 @@
         <module>jsf-example_owb-one-way</module>
         <module>jsf-example_owb-two-way</module>
         <module>jsf-example_cdi-two-way</module>
+        <module>jsf-example_cdi_in_spring</module>
         <module>jsf-example_cdi_full</module>
     </modules>
 
